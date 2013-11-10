@@ -8,12 +8,20 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 public class HColor implements Comparable<HColor>, Parcelable {
+	// These are accessible for performance.
+	// Hue (Normalized to 0 to 255)
 	double h = 0;
+	// Saturation (Normalized to 0 to 255)
 	double s = 0;
+	// Luminance (Normalized to 0 to 255)
 	double l = 0;
+	// Red
 	int r = 0;
+	// Green
 	int g = 0;
+    // Blue
 	int b = 0;
+	
 	public double distance = 0;
 	public int key = -1;
 
@@ -121,7 +129,7 @@ public class HColor implements Comparable<HColor>, Parcelable {
 		if (maxcol == mincol)
 			ret[0] = 0;
 		if (r == maxcol)
-			ret[0] = (g - b) / (maxcol - mincol);
+			ret[0] = (g - b) / (maxcol - mincol) + (g < b ? 6.0 : 0);
 		else if (g == maxcol)
 			ret[0] = 2.0 + (b - r) / (maxcol - mincol);
 		else if (b == maxcol)
@@ -137,20 +145,6 @@ public class HColor implements Comparable<HColor>, Parcelable {
 		return ret;
 	}
 
-	public boolean isSimilar(HColor other) {
-		int rad = (h > 100) ? 25 : 5;
-		if (Math.abs(h - other.h) < rad) {
-			if (Math.abs(l - other.l) < 25) {
-				return true;
-			}
-		}
-		return false;
-	}
-	
-	//private double distance(double x1, double y1, double z1, double x2, double y2, double z2) {
-	//	return Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1)+(z2-z1)*(z2-z1));
-	//}
-	
 	protected double distance(HColor other) {
 		double[] vals = {r-other.r, g-other.g, b-other.b};
 		double sum = 0;
@@ -171,25 +165,45 @@ public class HColor implements Comparable<HColor>, Parcelable {
 			return ids.get(0);
 	}
 	
-	public void usurp(HColor other)
-	{
+	/**
+	 * Updates this color by taking the average of this and other color.
+	 * @param other color to be averaged with this
+	 */
+	public void usurp(HColor other) {
 		this.r = (r+other.r)/2;
 		this.g = (g+other.g)/2;
 		this.b = (b+other.b)/2;
 		this.h = (h+other.h)/2;
 		this.l = (l+other.l)/2;
-		this.s = (s+other.r)/2;
+		this.s = (s+other.s)/2;
 	}
 	
 	@Override
 	public String toString() {
 		return String.format("0x%X", getColor());
-		
 	}
 	
+	/**
+	 * Compares two colors by comparing their hue. This is somewhat problematic because hue of 0
+	 * and 255 are equal so a collection sorted by hue is circular in nature.
+	 */
 	@Override
 	public int compareTo(HColor another) {
-		return Double.compare(h, another.h);
+		// This gets called a lot so inline it.
+		// return Double.compare(h, another.h);
+		
+		double other = another.h;
+	    if (h < other)
+	        return -1;       // Neither val is NaN, thisVal is smaller
+	    if (h > other)
+	        return 1;        // Neither val is NaN, thisVal is larger
+
+	    long thisBits = Double.doubleToLongBits(h);
+	    long anotherBits = Double.doubleToLongBits(other);
+
+	    return (thisBits == anotherBits ?  0 : // Values are equal
+	            (thisBits < anotherBits ? -1 : // (-0.0, 0.0) or (!NaN, NaN)
+	             1));                          // (0.0, -0.0) or (NaN, !NaN)
 	}
 
 	private HColor(Parcel in) {
