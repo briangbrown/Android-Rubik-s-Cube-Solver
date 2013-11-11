@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.List;
@@ -33,6 +34,9 @@ public class ColorDecoder implements Parcelable {
 	byte nextId;
 	String cacheDir;
 	
+	// For profiling
+	long sobelTime = 0;
+	
 	/*static {
 		System.loadLibrary("colordecoder");
     }*/
@@ -53,16 +57,64 @@ public class ColorDecoder implements Parcelable {
 //		}
 //	}
 	
-	private static int sobel(Bitmap image, int x, int y) {
-		int r, g, b, color, horizSobel, vertSobel;
-		int[][] sob = new int[3][3];
+//	/**
+//	 * Applies the sobel kernel to the given position in a pixel array.
+//	 * @param pixels array of rgb pixels stored in an int
+//	 * @param x position to center kernel in X
+//	 * @param y  position to center kernel in Y
+//	 * @param width of pixel image to determin the stride when dealing with pixels
+//	 * @param cache a solution cache the we will store the solution and check for previous answers
+//	 * @param sob a temporary 3x3
+//	 * @return
+//	 */
+//	private int sobel(int[] pixels, int x, int y, int width, int[] cache, int[][] sob) {
+//		long startTime = System.currentTimeMillis();
+//		int position = x + y * width;
+//		if (cache[position] != -1) {
+//			return cache[position];
+//		}
+//		int r, g, b, color, horizSobel, vertSobel;
+//		for (int i = -1; i <= 1; i++) {
+//			for (int j = -1; j <= 1; j++) {
+//				color = pixels[x + i + (y + j) * width];
+//				r = (color >> 16) & 0xFF;
+//				g = (color >> 8) & 0xFF;
+//				b = color & 0xFF;
+//				sob[i + 1][j + 1] = (int) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
+//			}
+//		}
+//		horizSobel = -(sob[1 - 1][1 - 1]) + (sob[1 + 1][1 - 1])
+//				- (sob[1 - 1][1]) - (sob[1 - 1][1]) + (sob[1 + 1][1])
+//				+ (sob[1 + 1][1]) - (sob[1 - 1][1 + 1]) + (sob[1 + 1][1 + 1]);
+//		vertSobel = -(sob[1 - 1][1 - 1]) - (sob[1][1 - 1]) - sob[1][1 - 1]
+//				- (sob[1 + 1][1 - 1]) + (sob[1 - 1][1 + 1]) + (sob[1][1 + 1])
+//				+ (sob[1][1 + 1]) + (sob[1 + 1][1 + 1]);
+//		int min = Math.min(255, Math.max(0, (horizSobel + vertSobel) / 2));
+//		cache[position] = min;
+//		sobelTime += System.currentTimeMillis() - startTime;
+//		return min;
+//	}
+	
+	/**
+	 * Applies the sobel kernel to the given position in a pixel array.
+	 * @param pixels array of rgb pixels stored in an int
+	 * @param x position to center kernel in X
+	 * @param y  position to center kernel in Y
+	 * @param width of pixel image to determin the stride when dealing with pixels
+	 * @param cache a solution cache the we will store the solution and check for previous answers
+	 * @param sob a temporary 3x3
+	 * @return
+	 */
+	private int sobelLuminance(byte[] luminance, int x, int y, int width, int[] cache, int[][] sob) {
+		long startTime = System.currentTimeMillis();
+		int position = x + y * width;
+		if (cache[position] != -1) {
+			return cache[position];
+		}
+		int horizSobel, vertSobel;
 		for (int i = -1; i <= 1; i++) {
 			for (int j = -1; j <= 1; j++) {
-				color = image.getPixel(x + i, y + j);
-				r = (color >> 16) & 0xFF;
-				g = (color >> 8) & 0xFF;
-				b = color & 0xFF;
-				sob[i + 1][j + 1] = (int) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
+				sob[i + 1][j + 1] = luminance[x + i + (y + j) * width];
 			}
 		}
 		horizSobel = -(sob[1 - 1][1 - 1]) + (sob[1 + 1][1 - 1])
@@ -71,7 +123,29 @@ public class ColorDecoder implements Parcelable {
 		vertSobel = -(sob[1 - 1][1 - 1]) - (sob[1][1 - 1]) - sob[1][1 - 1]
 				- (sob[1 + 1][1 - 1]) + (sob[1 - 1][1 + 1]) + (sob[1][1 + 1])
 				+ (sob[1][1 + 1]) + (sob[1 + 1][1 + 1]);
-		return Math.min(255, Math.max(0, (horizSobel + vertSobel) / 2));
+		int min = Math.min(255, Math.max(0, (horizSobel + vertSobel) / 2));
+		cache[position] = min;
+		sobelTime += System.currentTimeMillis() - startTime;
+		return min;
+	}
+	
+	private void getLuminance(int[] pixels, byte[] luminance) {
+		int r, g, b, color;
+		for (int i = 0; i < pixels.length; i++) {
+			color = pixels[i];
+			r = (color >> 16) & 0xFF;
+			g = (color >> 8) & 0xFF;
+			b = color & 0xFF;
+			if (r == g && g == b) {
+				luminance[i] = (byte) r;
+			} else {
+				// Cheap approximate luminance
+				// luminance[i] = (byte) ((r + g + g + b) >> 2);
+				
+				// Full luminance calc
+				luminance[i] = (byte) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
+			}
+		}
 	}
 	
 	//protected static native int[][] nativeSobelData(Bitmap bitmap);
@@ -268,6 +342,7 @@ public class ColorDecoder implements Parcelable {
 	
 	public byte[] decode(Bitmap im) {
 		firstNewCol = (byte) (nextId+1);
+		sobelTime = 0;
 		long s = System.currentTimeMillis();
 		/*int[][] sobelDat;
 		if (android.os.Build.VERSION.SDK_INT >= 8 ) {
@@ -277,21 +352,31 @@ public class ColorDecoder implements Parcelable {
 			sobelDat = sobelData(im); 
 		}*/
 		long e = System.currentTimeMillis();
-		long sobelTime = e-s;
 		byte[] ret = new byte[]{-1,-1,-1,-1,-1,-1,-1,-1,-1};//new ArrayList<Byte>();
 		s = System.currentTimeMillis();
 		int retCount = 0;
 		ArrayList<HColor> subCubes = new ArrayList<HColor>();
+		ArrayList<HColor> sampleSubCubes = new ArrayList<HColor>();
 		//ArrayList<HColor> hues = new ArrayList<HColor>();
 		ArrayList<HColor> cubeVals = new ArrayList<HColor>();
 		HColor c;
-		int x0,y0,x1,y1,xc,yc,l,h;
+		int x0,y0,x1,y1,xc,yc; // l,h;
+		int sampleLow, sampleHigh;
+		HColor sampleColor;
 		int width = im.getWidth();
 		int height = im.getHeight();
+		int[] pixels = new int[width * height];
+		byte[] luminance = new byte[width * height];
+		int[][] sobelTemp = new int[3][3];
+		int[] sobelData = new int[width * height];
+		Arrays.fill(sobelData, -1);
+		im.getPixels(pixels, 0, width, 0, 0, width, height);
+		getLuminance(pixels, luminance);
 		int margin = (int) (Math.min(width, height) * .1);
 		int sideLength = Math.min(width, height) - margin;
 		for (int i=0; i<9; i++) {
 			subCubes.clear();
+			sampleSubCubes.clear();
 			x0 = (width - sideLength) / 2 + (sideLength / 3) * ((i/3) % 3);
 			y0 = height - margin/2 - (sideLength / 3) * (i % 3);//margin/2 + sideLength * (3 - (i % 3))/3;
 			xc = x0 + (sideLength / 6);
@@ -301,54 +386,69 @@ public class ColorDecoder implements Parcelable {
 			
 			// Q1
 			for (int x=xc; x > x0; x--) {
-				if (sobel(im,x,yc) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
 				for (int y=yc; y < y0; y++) {
 					//Log.d("DSSD", String.format("%d %d %d %d", x,y,y0,width));
-					if (sobel(im,x,y) > 20) break;
-					c = new HColor(im.getPixel(x, y));
+					if (sobelLuminance(luminance, x, y ,width, sobelData, sobelTemp) > 20) break;
+					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-				
 			}
 			
 			// Q2
 			for (int x=xc; x > x0; x--) {
-				if (sobel(im,x,yc) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
 				for (int y=yc; y > y1; y--) {
-					if (sobel(im,x,y) > 20) break;
-					c = new HColor(im.getPixel(x, y));
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-				
 			}
 			
 			// Q3
 			for (int x=xc; x < x1; x++) {
-				if (sobel(im,x,yc) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
 				for (int y=yc; y < y0; y++) {
-					if (sobel(im,x,y) > 20) break;
-					c = new HColor(im.getPixel(x, y));
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-				
 			}
 			
 			// Q4
 			for (int x=xc; x < x1; x++) {
-				if (sobel(im,x,yc) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
 				for (int y=yc; y > y1; y--) {
-					if (sobel(im,x,y) > 20) break;
-					c = new HColor(im.getPixel(x, y));
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-				
 			}
 
-			Collections.sort(subCubes);
-			l = (int) (subCubes.size() * .35);
-			h = (int) (subCubes.size() * .65);
-	        c = avg(subCubes.subList(l, h));
-	        cubeVals.add(c);
+			//Collections.sort(subCubes);
+			//l = (int) (subCubes.size() * .35);
+			//h = (int) (subCubes.size() * .65);
+	        //c = avg(subCubes.subList(l, h));
+	        
+			//for (int samp = 0; samp < 10; samp++) {
+				Collections.shuffle(subCubes);
+				final int sampleSize = (int) (subCubes.size() * 0.1);
+				List<HColor> sampleList = subCubes.subList(0, sampleSize);
+				Collections.sort(sampleList);
+				sampleLow = (int) (sampleList.size() * .35);
+				sampleHigh = (int) (sampleList.size() * .65);
+				sampleColor = avg(sampleList.subList(sampleLow, sampleHigh));
+			
+//		        Log.d("DECODER", String.format("Original Size %d, Sample Percent %f, Distance = %f",
+//		        		subCubes.size(), samplePercent, sampleColor.distance(sampleColor)));
+			//}
+	        
+	        cubeVals.add(sampleColor);
+	        
+			// Instead of thresholding the colors and using that, just use them all.
+			// In the past these were sorted by Hue anyway which makes no sense. Possibly luminance.
+		    //c = avg(subCubes);
+	        //cubeVals.add(c);
 		}
 		/*for (int i=1; i<9; i++)
 		{
