@@ -97,16 +97,15 @@ public class LoadCube extends Activity {
 					mCamera.startPreview();
 				} else if (pictureState == 0) {
 					pictureState = 1;
-					mCamera.takePicture(shutterCallback, rawCallback,
-							jpegCallback);
-					/*mCamera.autoFocus(new AutoFocusCallback() {
-
+//					mCamera.takePicture(shutterCallback, rawCallback,
+//							jpegCallback);
+					mCamera.autoFocus(new AutoFocusCallback() {
 						@Override
 						public void onAutoFocus(boolean success, Camera camera) {
 							camera.takePicture(shutterCallback, rawCallback,
 									jpegCallback);
 						}
-					});*/
+					});
 				}
 			}
 		});
