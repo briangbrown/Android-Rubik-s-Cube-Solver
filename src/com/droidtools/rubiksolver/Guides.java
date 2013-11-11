@@ -35,7 +35,8 @@ public class Guides extends View {
 		margin = (int) (Math.min(deviceWidth, deviceHeight) * .1);
 		for (int i=0; i<4; i++) {
 			x0 = ((deviceWidth - sideLength) / 2) + (sideLength / 3) * i;
-			y0 = margin/2; y1 = y0+sideLength;
+			y0 = margin/2;
+			y1 = y0+sideLength;
 			canvas.drawLine(x0,y0,x0,y1,mPaint);
 			
 			x0 = ((deviceWidth - sideLength) / 2);
