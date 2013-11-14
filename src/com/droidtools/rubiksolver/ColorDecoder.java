@@ -186,7 +186,7 @@ public class ColorDecoder implements Parcelable {
 //		return out;
 //	}
 	
-	private HColor avg(List<HColor> L) {
+	public static HColor avg(List<HColor> L) {
 		double h,l,s;
 		int r,g,b;
 		h=l=s=0;

@@ -10,17 +10,17 @@ import android.os.Parcelable;
 public class HColor implements Comparable<HColor>, Parcelable {
 	// These are accessible for performance.
 	// Hue (Normalized to 0 to 255)
-	double h = 0;
+	public double h = 0;
 	// Saturation (Normalized to 0 to 255)
-	double s = 0;
+	public double s = 0;
 	// Luminance (Normalized to 0 to 255)
-	double l = 0;
+	public double l = 0;
 	// Red
-	int r = 0;
+	public int r = 0;
 	// Green
-	int g = 0;
+	public int g = 0;
     // Blue
-	int b = 0;
+	public int b = 0;
 	
 	public double distance = 0;
 	public int key = -1;
