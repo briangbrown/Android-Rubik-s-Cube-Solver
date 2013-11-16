@@ -145,7 +145,7 @@ public class HColor implements Comparable<HColor>, Parcelable {
 		return ret;
 	}
 
-	protected double distance(HColor other) {
+	public double distance(HColor other) {
 		double[] vals = {r-other.r, g-other.g, b-other.b};
 		double sum = 0;
 		for (int i = 0; i<vals.length; i++)
