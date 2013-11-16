@@ -35,7 +35,10 @@ public class ColorDecoder implements Parcelable {
 	private ConcurrentNavigableMap<Byte, Parcelable[]> ids;
 	byte firstNewCol;
 	byte nextId;
+	// Path to the cache directory for file IO.
 	final String cacheDir;
+	// Path to the external directory for file IO.
+	final String externalDir;
 	
 	// For profiling
 	long sobelTime = 0;
@@ -44,13 +47,14 @@ public class ColorDecoder implements Parcelable {
 		System.loadLibrary("colordecoder");
     }*/
 	
-	public ColorDecoder(String cache) {
+	public ColorDecoder(String cacheDir, String externalDir) {
 		//colors = new ArrayList<HColor>();
 		//images = new ArrayList<Bitmap>();
 		ids = new ConcurrentSkipListMap<Byte, Parcelable[]>();
 		//firstNewCol = 0;
 		nextId = 0;
-		cacheDir = cache;
+		this.cacheDir = cacheDir;
+		this.externalDir = externalDir;
 	}
 	
 //	private void free() {
@@ -384,9 +388,14 @@ public class ColorDecoder implements Parcelable {
 		im.getPixels(pixels, 0, width, 0, 0, width, height);
 		getLuminance(pixels, luminance);
 		// DEBUG: Enable to write out a debug luminance image.
-		// saveGreyBitmap(luminance, "luminance.png", width, height);
+		if (AppConfig.DEBUG) {
+			debugSaveGreyBitmap(luminance, "luminance.png", width, height);
+		}
 		int margin = (int) (Math.min(width, height) * .1);
 		int sideLength = Math.min(width, height) - margin;
+		
+		final int sobelThreshold = 40;
+		
 		for (int i=0; i<9; i++) {
 			subCubes.clear();
 			sampleSubCubes.clear();
@@ -399,10 +408,10 @@ public class ColorDecoder implements Parcelable {
 			
 			// Q1
 			for (int x=xc; x > x0; x--) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
 				for (int y=yc; y < y0; y++) {
 					//Log.d("DSSD", String.format("%d %d %d %d", x,y,y0,width));
-					if (sobelLuminance(luminance, x, y ,width, sobelData, sobelTemp) > 20) break;
+					if (sobelLuminance(luminance, x, y ,width, sobelData, sobelTemp) > sobelThreshold) break;
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
@@ -410,9 +419,9 @@ public class ColorDecoder implements Parcelable {
 			
 			// Q2
 			for (int x=xc; x > x0; x--) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
 				for (int y=yc; y > y1; y--) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
@@ -420,9 +429,9 @@ public class ColorDecoder implements Parcelable {
 			
 			// Q3
 			for (int x=xc; x < x1; x++) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
 				for (int y=yc; y < y0; y++) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
@@ -430,9 +439,9 @@ public class ColorDecoder implements Parcelable {
 			
 			// Q4
 			for (int x=xc; x < x1; x++) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > 20) break;
+				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
 				for (int y=yc; y > y1; y--) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > 20) break;
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
@@ -465,7 +474,9 @@ public class ColorDecoder implements Parcelable {
 		}
 		
 		// DEBUG: Write out the sobel data (only includes the pixels that were transformed)
-		// saveGreyBitmap(sobelData, "sobelData.png", width, height);
+		if (AppConfig.DEBUG) {
+			debugSaveGreyBitmap(sobelData, "sobelData.png", width, height);
+		}
 		
 		/*for (int i=1; i<9; i++)
 		{
@@ -535,7 +546,7 @@ public class ColorDecoder implements Parcelable {
 	}
 
 	private ColorDecoder(Parcel in) {
-		this(in.readString());
+		this(in.readString(), in.readString());
 		//in.readTypedList(colors, HColor.CREATOR);
 		//in.readTypedList(images, Bitmap.CREATOR);
 		//in.readMap(ids, Map.class.getClassLoader());
@@ -610,6 +621,7 @@ public class ColorDecoder implements Parcelable {
 		}
 		//out.writeArray((Integer[]) ids.keySet().toArray(new Byte[0]));
 		out.writeString(cacheDir);
+		out.writeString(externalDir);
 		out.writeInt(ids.keySet().size());
 		out.writeByteArray(toByteArray(ids.keySet()));
 		out.writeBundle(b);
@@ -651,7 +663,7 @@ public class ColorDecoder implements Parcelable {
 		ids.keySet().retainAll(usedColors);
 	}
 	
-	private void saveGreyBitmap(int[] grey, String fileName, int width, int height) {
+	private void debugSaveGreyBitmap(int[] grey, String fileName, int width, int height) {
 		int[] colors = new int[grey.length];
 		for (int i = 0; i < colors.length; i++) {
 			int r, g, b;
@@ -670,19 +682,19 @@ public class ColorDecoder implements Parcelable {
 			colors[i] = 0xFF << 24 | r << 16 | g << 8 | b;
 		}
 		Bitmap image = Bitmap.createBitmap(colors, width, height, Config.ARGB_8888);
-		saveToInternalFile(image, fileName);
+		debugSaveToExternalFile(image, fileName);
 	}
 	
 	/**
 	 * Saves an image as a png with the given fileName. The file will be saved to
-	 * /data/data/com.droidtools.rubiksolver/files/<fileName>
+	 * <externalDir>/<fileName>
 	 * This can be found in the emulator or hardware device when debugging.
 	 * @param image to save
 	 * @param fileName name of the file
 	 */
-	private void saveToInternalFile(Bitmap image, String fileName) {
+	private void debugSaveToExternalFile(Bitmap image, String fileName) {
 	    try {
-	        File file = new File(cacheDir, fileName);
+	        File file = new File(externalDir, fileName);
 	        FileOutputStream fos = new FileOutputStream(file);
 	        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
 	        fos.close();

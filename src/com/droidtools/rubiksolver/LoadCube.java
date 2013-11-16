@@ -1,5 +1,10 @@
 package com.droidtools.rubiksolver;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -71,7 +76,8 @@ public class LoadCube extends Activity {
 		face = getIntent().getStringExtra("face");
 		loadFaces(b);
 		if (face.equals("FRONT")) {
-			decoder = new ColorDecoder(getCacheDir().getAbsolutePath());
+			decoder = new ColorDecoder(getCacheDir().getAbsolutePath(),
+					getExternalFilesDir(null).getAbsolutePath());
 		} else {
 			decoder = b.getParcelable("DECODER");
 			if (decoder == null)
@@ -334,15 +340,48 @@ public class LoadCube extends Activity {
 			Log.d(TAG,
 					String.format("Async - jpeg - %d", bitmap[0].getHeight()));
 			Bitmap img = bitmap[0];
+			// DEBUG: The image captured for the cube face.
+			if (AppConfig.DEBUG) {
+				debugSaveToExternalFile(img, "cube_face_capture_raw.png");
+			}
+			
+			// Crop image to preview size so the guides line up with the image correctly.
+			int deviceWidth = mGuides.deviceWidth;
+			int deviceHeight = mGuides.deviceHeight;
+			int imageWidth = img.getWidth();
+			int imageHeight = img.getHeight();
+			float deviceAspect = deviceWidth / (float) deviceHeight;
+			float imageAspect = imageWidth / (float) imageHeight;
+			
+			final double ASPECT_TOLERANCE = 0.1;
+			if (Math.abs(deviceAspect - imageAspect) > ASPECT_TOLERANCE) {
+				if (imageAspect > deviceAspect) {
+					int newWidth = (int) (deviceAspect * imageHeight);
+					img = Bitmap.createBitmap(
+							img, (imageWidth - newWidth) / 2, 0, newWidth, imageHeight);
+				} else {
+					int newHeight = (int) (imageWidth / deviceAspect);
+					img = Bitmap.createBitmap(
+							img, 0, (imageHeight - newHeight) / 2, imageWidth, newHeight);
+				}
+			}
+			// DEBUG: The cropped image captured for the cube face.
+			if (AppConfig.DEBUG) {
+				debugSaveToExternalFile(img, "cube_face_capture_cropped.png");
+			}
+			
 			if (img.getWidth() > 600) {
+				// Perform a uniform scaling
 				int newWidth = 600;
-				int newHeight = 360;
 				float scaleWidth = ((float) newWidth) / img.getWidth();
-				float scaleHeight = ((float) newHeight) / img.getHeight();
 			    Matrix matrix = new Matrix();
-		        matrix.postScale(scaleWidth, scaleHeight);
+		        matrix.postScale(scaleWidth, scaleWidth);
 		        img = Bitmap.createBitmap(img, 0, 0,
 		        		img.getWidth(), img.getHeight(), matrix, true);
+		        // DEBUG: The scaled image captured for the cube face.
+		        if (AppConfig.DEBUG) {
+		        	debugSaveToExternalFile(img, "cube_face_capture_scaled.png");
+		        }
 			}
 			return decoder.decode(img);
 			//return new byte[]{-1,-1,-1,-1,-1,-1,-1,-1,-1};
@@ -372,6 +411,26 @@ public class LoadCube extends Activity {
 			startActivity(i);
 			// Toast.makeText(LoadCube.this, text, Toast.LENGTH_LONG);
 			// Log.d(TAG, text);
+		}
+		
+		/**
+		 * Saves an image as a png with the given fileName. The file will be saved to
+		 * <external data>/Android/data/com.droidtools.rubiksolver/files/<fileName>
+		 * This can be found in the emulator or hardware device when debugging.
+		 * @param image to save
+		 * @param fileName name of the file
+		 */
+		private void debugSaveToExternalFile(Bitmap image, String fileName) {
+		    try {
+		        File file = new File(getExternalFilesDir(null), fileName);
+		        FileOutputStream fos = new FileOutputStream(file);
+		        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
+		        fos.close();
+		    } catch (FileNotFoundException e) {
+		        e.printStackTrace();
+		    } catch (IOException e) {
+		        e.printStackTrace();
+		    }
 		}
 	}
 

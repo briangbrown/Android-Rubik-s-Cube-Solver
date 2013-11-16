@@ -80,7 +80,8 @@ public class ColorDecoderTest extends AndroidTestCase {
 			}
 		}
 		
-		ColorDecoder decoder = new ColorDecoder(getContext().getCacheDir().getAbsolutePath());
+		ColorDecoder decoder = new ColorDecoder(getContext().getCacheDir().getAbsolutePath(),
+				getContext().getExternalFilesDir(null).getAbsolutePath());
 		byte[] ids = decoder.decode(getTestCubeBitmap(colorIndex));
 		
 		// There should always be 9 cubelets.
@@ -177,7 +178,7 @@ public class ColorDecoderTest extends AndroidTestCase {
 		}
 		
 		// Save out the cube face image for visual inspection.
-		saveToInternalFile(testCubeImage, "test_face.png");
+		saveToExternalFile(testCubeImage, "test_face.png");
 		return testCubeImage;
 	}
 	
@@ -199,14 +200,14 @@ public class ColorDecoderTest extends AndroidTestCase {
 	
 	/**
 	 * Saves an image as a png with the given fileName. The file will be saved to
-	 * /data/data/com.droidtools.rubiksolver/files/<fileName>
+	 * <externalDir>/<fileName>
 	 * This can be found in the emulator or hardware device when debugging.
 	 * @param image to save
 	 * @param fileName name of the file
 	 */
-	private void saveToInternalFile(Bitmap image, String fileName) {
+	private void saveToExternalFile(Bitmap image, String fileName) {
 	    try {
-	        File file = new File(getContext().getFilesDir(), fileName);
+	        File file = new File(getContext().getExternalFilesDir(null), fileName);
 	        FileOutputStream fos = new FileOutputStream(file);
 	        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
 	        fos.close();
