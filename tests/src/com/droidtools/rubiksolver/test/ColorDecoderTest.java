@@ -1,21 +1,24 @@
 package com.droidtools.rubiksolver.test;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import junit.framework.TestCase;
-
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.test.AndroidTestCase;
 
 import com.droidtools.rubiksolver.ColorDecoder;
 import com.droidtools.rubiksolver.HColor;
 
-public class ColorDecoderTest extends TestCase {
+public class ColorDecoderTest extends AndroidTestCase {
 
 	public ColorDecoderTest() {
 		super();
@@ -42,7 +45,7 @@ public class ColorDecoderTest extends TestCase {
 	 * and colors are decoded.
 	 */
 	public void testSyntheticSimpleDecode() {
-		ColorDecoder decoder = new ColorDecoder(null);
+		ColorDecoder decoder = new ColorDecoder(getContext().getCacheDir().getAbsolutePath());
 		byte[][] colorIndex = new byte[][] {
 				{0, 0, 0}, // [0][0], [0][1], [0][2]
 				{1, 1, 1}, // [1][0], [1][1], [1][2]
@@ -142,6 +145,8 @@ public class ColorDecoderTest extends TestCase {
 			}	
 		}
 		
+		// Save out the cube face image for visual inspection.
+		saveToInternalFile(testCubeImage, "test_face.png");
 		return testCubeImage;
 	}
 	
@@ -159,5 +164,25 @@ public class ColorDecoderTest extends TestCase {
 		assertTrue(index >= 0);
 		
 		return cubletColors[index];
+	}
+	
+	/**
+	 * Saves an image as a png with the given fileName. The file will be saved to
+	 * /data/data/com.droidtools.rubiksolver/files/<fileName>
+	 * This can be found in the emulator or hardware device when debugging.
+	 * @param image to save
+	 * @param fileName name of the file
+	 */
+	private void saveToInternalFile(Bitmap image, String fileName) {
+	    try {
+	        File file = new File(getContext().getFilesDir(), fileName);
+	        FileOutputStream fos = new FileOutputStream(file);
+	        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
+	        fos.close();
+	    } catch (FileNotFoundException e) {
+	        e.printStackTrace();
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    }
 	}
 }

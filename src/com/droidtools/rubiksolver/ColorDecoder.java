@@ -2,7 +2,9 @@ package com.droidtools.rubiksolver;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -18,6 +20,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.graphics.Bitmap.Config;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -32,7 +35,7 @@ public class ColorDecoder implements Parcelable {
 	private ConcurrentNavigableMap<Byte, Parcelable[]> ids;
 	byte firstNewCol;
 	byte nextId;
-	String cacheDir;
+	final String cacheDir;
 	
 	// For profiling
 	long sobelTime = 0;
@@ -105,7 +108,7 @@ public class ColorDecoder implements Parcelable {
 	 * @param sob a temporary 3x3
 	 * @return
 	 */
-	private int sobelLuminance(byte[] luminance, int x, int y, int width, int[] cache, int[][] sob) {
+	private int sobelLuminance(int[] luminance, int x, int y, int width, int[] cache, int[][] sob) {
 		long startTime = System.currentTimeMillis();
 		int position = x + y * width;
 		if (cache[position] != -1) {
@@ -117,19 +120,27 @@ public class ColorDecoder implements Parcelable {
 				sob[i + 1][j + 1] = luminance[x + i + (y + j) * width];
 			}
 		}
-		horizSobel = -(sob[1 - 1][1 - 1]) + (sob[1 + 1][1 - 1])
-				- (sob[1 - 1][1]) - (sob[1 - 1][1]) + (sob[1 + 1][1])
-				+ (sob[1 + 1][1]) - (sob[1 - 1][1 + 1]) + (sob[1 + 1][1 + 1]);
-		vertSobel = -(sob[1 - 1][1 - 1]) - (sob[1][1 - 1]) - sob[1][1 - 1]
-				- (sob[1 + 1][1 - 1]) + (sob[1 - 1][1 + 1]) + (sob[1][1 + 1])
-				+ (sob[1][1 + 1]) + (sob[1 + 1][1 + 1]);
-		int min = Math.min(255, Math.max(0, (horizSobel + vertSobel) / 2));
+		// -1, 0, 1
+		// -2, 0, 2
+		// -1, 0, 1
+		vertSobel =
+				- sob[0][0] +     0     + sob[2][0]
+				- sob[0][1] - sob[0][1] + sob[2][1] + sob[2][1]
+				- sob[2][2] +     0     + sob[2][2];
+		// -1, -2, -1
+		//  0,  0,  0
+		//  1,  2,  1
+		horizSobel =
+				- sob[0][0] - sob[1][0] - sob[1][0] - sob[2][0]
+				+ sob[0][2] + sob[1][2] + sob[1][2] + sob[2][2];
+		// This is a modification to classic sobel that highly favors vertical and horizontal edges.
+		int min = Math.min(255, Math.max(0, Math.abs(horizSobel + vertSobel) / 4));
 		cache[position] = min;
 		sobelTime += System.currentTimeMillis() - startTime;
 		return min;
 	}
 	
-	private void getLuminance(int[] pixels, byte[] luminance) {
+	private void getLuminance(int[] pixels, int[] luminance) {
 		int r, g, b, color;
 		for (int i = 0; i < pixels.length; i++) {
 			color = pixels[i];
@@ -137,13 +148,13 @@ public class ColorDecoder implements Parcelable {
 			g = (color >> 8) & 0xFF;
 			b = color & 0xFF;
 			if (r == g && g == b) {
-				luminance[i] = (byte) r;
+				luminance[i] = r;
 			} else {
 				// Cheap approximate luminance
 				// luminance[i] = (byte) ((r + g + g + b) >> 2);
 				
 				// Full luminance calc
-				luminance[i] = (byte) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
+				luminance[i] = (int) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
 			}
 		}
 	}
@@ -366,12 +377,14 @@ public class ColorDecoder implements Parcelable {
 		int width = im.getWidth();
 		int height = im.getHeight();
 		int[] pixels = new int[width * height];
-		byte[] luminance = new byte[width * height];
+		int[] luminance = new int[width * height];
 		int[][] sobelTemp = new int[3][3];
 		int[] sobelData = new int[width * height];
 		Arrays.fill(sobelData, -1);
 		im.getPixels(pixels, 0, width, 0, 0, width, height);
 		getLuminance(pixels, luminance);
+		// DEBUG: Enable to write out a debug luminance image.
+		// saveGreyBitmap(luminance, "luminance.png", width, height);
 		int margin = (int) (Math.min(width, height) * .1);
 		int sideLength = Math.min(width, height) - margin;
 		for (int i=0; i<9; i++) {
@@ -450,6 +463,10 @@ public class ColorDecoder implements Parcelable {
 		    //c = avg(subCubes);
 	        //cubeVals.add(c);
 		}
+		
+		// DEBUG: Write out the sobel data (only includes the pixels that were transformed)
+		// saveGreyBitmap(sobelData, "sobelData.png", width, height);
+		
 		/*for (int i=1; i<9; i++)
 		{
 			Log.d("DISTANCE", String.format("%d - %.5f units", i, cubeVals.get(0).distance(cubeVals.get(i))));
@@ -632,5 +649,47 @@ public class ColorDecoder implements Parcelable {
 	 */
 	public void removeUnusedColors(Set<Byte> usedColors) {
 		ids.keySet().retainAll(usedColors);
+	}
+	
+	private void saveGreyBitmap(int[] grey, String fileName, int width, int height) {
+		int[] colors = new int[grey.length];
+		for (int i = 0; i < colors.length; i++) {
+			int r, g, b;
+			r = g = b = grey[i];
+			if (r < 0) {
+				// For underflow make it blue
+				r = 0;
+				g = 0;
+				b = 255;
+			} else if (r > 255) {
+				// For overflow make it red
+				r = 255;
+				g = 0;
+				b = 0;
+			}
+			colors[i] = 0xFF << 24 | r << 16 | g << 8 | b;
+		}
+		Bitmap image = Bitmap.createBitmap(colors, width, height, Config.ARGB_8888);
+		saveToInternalFile(image, fileName);
+	}
+	
+	/**
+	 * Saves an image as a png with the given fileName. The file will be saved to
+	 * /data/data/com.droidtools.rubiksolver/files/<fileName>
+	 * This can be found in the emulator or hardware device when debugging.
+	 * @param image to save
+	 * @param fileName name of the file
+	 */
+	private void saveToInternalFile(Bitmap image, String fileName) {
+	    try {
+	        File file = new File(cacheDir, fileName);
+	        FileOutputStream fos = new FileOutputStream(file);
+	        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
+	        fos.close();
+	    } catch (FileNotFoundException e) {
+	        e.printStackTrace();
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    }
 	}
 }
