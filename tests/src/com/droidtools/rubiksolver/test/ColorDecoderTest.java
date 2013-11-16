@@ -40,17 +40,47 @@ public class ColorDecoderTest extends AndroidTestCase {
 		assertEquals(85, avgColor.b);
 	}
 	
-	/**
-	 * Tests a synthetically created cube with the decode method making sure the right number
-	 * and colors are decoded.
-	 */
-	public void testSyntheticSimpleDecode() {
-		ColorDecoder decoder = new ColorDecoder(getContext().getCacheDir().getAbsolutePath());
+	
+	public void testSyntheticRowThreeColorDecode() {
 		byte[][] colorIndex = new byte[][] {
 				{0, 0, 0}, // [0][0], [0][1], [0][2]
 				{1, 1, 1}, // [1][0], [1][1], [1][2]
 				{2, 2, 2}  // [2][0], [2][1], [2][2]
 		};
+		assertSyntheticCubeDecode(colorIndex);
+	}
+	
+	public void testSyntheticColumnThreeColorDecode() {
+		byte[][] colorIndex = new byte[][] {
+				{0, 1, 2}, // [0][0], [0][1], [0][2]
+				{0, 1, 2}, // [1][0], [1][1], [1][2]
+				{0, 1, 2}  // [2][0], [2][1], [2][2]
+		};
+		assertSyntheticCubeDecode(colorIndex);
+	}
+	
+	public void testSyntheticSixColorDecode() {
+		byte[][] colorIndex = new byte[][] {
+				{0, 1, 2}, // [0][0], [0][1], [0][2]
+				{3, 4, 5}, // [1][0], [1][1], [1][2]
+				{2, 1, 0}  // [2][0], [2][1], [2][2]
+		};
+		assertSyntheticCubeDecode(colorIndex);
+	}
+
+	/**
+	 * Tests a synthetically created cube with the decode method making sure the right number of
+	 * colors and the correct colors are decoded.
+	 */
+	private void assertSyntheticCubeDecode(byte[][] colorIndex) {
+		Set<Byte> uniqueInputIndex = new TreeSet<Byte>();
+		for (int row = 0; row < 3; row++) {
+			for (int col = 0; col < 3; col++) {
+			    uniqueInputIndex.add(colorIndex[row][col]);
+			}
+		}
+		
+		ColorDecoder decoder = new ColorDecoder(getContext().getCacheDir().getAbsolutePath());
 		byte[] ids = decoder.decode(getTestCubeBitmap(colorIndex));
 		
 		// There should always be 9 cubelets.
@@ -62,7 +92,7 @@ public class ColorDecoderTest extends AndroidTestCase {
 		}
 		
 		// Number of different colors decoded.
-		assertEquals(3, uniqueIds.size());
+		assertEquals(uniqueInputIndex.size(), uniqueIds.size());
 		
 		// Verify each color
 		for (int row = 0; row < 3; row++) {
@@ -77,6 +107,7 @@ public class ColorDecoderTest extends AndroidTestCase {
 			}	
 		}
 	}
+	
 
 	/**
 	 * Creates a bitmap with a Rubik's Cube face drawn at the center using the specified color
