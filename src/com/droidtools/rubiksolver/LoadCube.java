@@ -379,6 +379,7 @@ public class LoadCube extends Activity {
 		        img = Bitmap.createBitmap(img, 0, 0,
 		        		img.getWidth(), img.getHeight(), matrix, true);
 		        // DEBUG: The scaled image captured for the cube face.
+		        // NOTE: This is the best image to use for testing ColorDecoder.decode().
 		        if (AppConfig.DEBUG) {
 		        	debugSaveToExternalFile(img, "cube_face_capture_scaled.png");
 		        }
