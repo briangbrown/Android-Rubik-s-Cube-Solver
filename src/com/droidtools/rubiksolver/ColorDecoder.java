@@ -201,22 +201,22 @@ public class ColorDecoder implements Parcelable {
 //		return out;
 //	}
 	
+    /**
+	 * Returns and average color of the list of colors. This is an RGB cartesian space average.
+	 * @param L list of colors to average
+	 * @return the avereage color
+	 */
 	public static HColor avg(List<HColor> L) {
-		double h,l,s;
 		int r,g,b;
-		h=l=s=0;
 		r=g=b=0;
 		for (HColor color : L) {
-			h += color.h;
 			r += color.r;
 			g += color.g;
 			b += color.b;
-			l += color.l;
-			s += color.s;
 		}
 		int sz = L.size();
-		if (sz == 0) return new HColor(0.0,0.0,0.0,0,0,0);
-		return new HColor(h/sz, l/sz, s/sz, r/sz, g/sz, b/sz);
+		if (sz == 0) return new HColor(0,0,0);
+		return new HColor(r/sz, g/sz, b/sz);
 	}
 
 	public HColor getColor(byte key) {
@@ -456,7 +456,7 @@ public class ColorDecoder implements Parcelable {
 				Collections.shuffle(subCubes);
 				final int sampleSize = (int) (subCubes.size() * 0.1);
 				List<HColor> sampleList = subCubes.subList(0, sampleSize);
-				Collections.sort(sampleList);
+				Collections.sort(sampleList, HColor.Comparators.LUMINANCE);
 				sampleLow = (int) (sampleList.size() * .35);
 				sampleHigh = (int) (sampleList.size() * .65);
 				sampleColor = avg(sampleList.subList(sampleLow, sampleHigh));
@@ -469,8 +469,8 @@ public class ColorDecoder implements Parcelable {
 	        
 			// Instead of thresholding the colors and using that, just use them all.
 			// In the past these were sorted by Hue anyway which makes no sense. Possibly luminance.
-		    //c = avg(subCubes);
-	        //cubeVals.add(c);
+		    // c = avg(subCubes);
+	        // cubeVals.add(c);
 		}
 		
 		// DEBUG: Write out the sobel data (only includes the pixels that were transformed)
@@ -492,7 +492,7 @@ public class ColorDecoder implements Parcelable {
 			boolean foundCol = false;
 			//for (int j=0; j < cz; j++) {
 		
-			Byte key = cubeVals.get(i).mostSimilar(new ArrayList<Byte>(ids.keySet()), this, 35);
+			Byte key = cubeVals.get(i).mostSimilar(new ArrayList<Byte>(ids.keySet()), this, 0.3);
 			if (key != null)
 			{
 				foundCol = true;
