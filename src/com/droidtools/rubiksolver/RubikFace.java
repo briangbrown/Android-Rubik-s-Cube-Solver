@@ -6,7 +6,9 @@ public class RubikFace {
 	byte[] struc;
 	String name;
 	Map<String, RubikFace> cube;
+	// Counter Clockwise Turn Mapping
 	static final int[] map1 = {2,5,8,1,4,7,0,3,6};
+	// Clockwise Turn Mapping
 	static final int[] map2 = {6,3,0,7,4,1,8,5,2};
 	
 	public RubikFace(String name, byte value, Map<String, RubikFace> cube) {

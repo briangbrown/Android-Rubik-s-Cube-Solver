@@ -1,6 +1,7 @@
 package com.droidtools.rubiksolver;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Formatter;
 import java.util.HashMap;
@@ -21,18 +22,59 @@ public class RubikCube {
 	private static final int UP = 4;
 	private static final int DOWN = 5;
 	ArrayList<CubeState> cubeList;
-	ArrayList<int[][]> cubeListDebug;
+	//ArrayList<int[][]> cubeListDebug;
 	
 	static {
 		System.loadLibrary("colordecoder");
     }
 
+	/**
+	 * Constructs a cube with an initial solved state.
+	 */
 	public RubikCube() {
 		cube = new HashMap<String, RubikFace>();
 		moveList = new ArrayList<RubikMove>();
 		cubeList = new ArrayList<CubeState>();
 
 		createCube();
+	}
+	
+	/**
+	 * Constructs a cube with the given cube state.
+	 * @param state of the cube
+	 */
+	public RubikCube(CubeState state) {
+		cube = new HashMap<String, RubikFace>();
+		moveList = new ArrayList<RubikMove>();
+		cubeList = new ArrayList<CubeState>();
+		
+		createCube();
+		setCubeState(state);
+	}
+	
+	/**
+	 * Sets the state of the cube. This also clears the move and cube lists.
+	 * @param state of the cube
+	 */
+	private void setCubeState(CubeState state) {
+		moveList.clear();
+		cubeList.clear();
+		
+		cube.get("FRONT").setValues(state.getFace(FRONT));
+		cube.get("BACK").setValues(state.getFace(BACK));
+		cube.get("LEFT").setValues(state.getFace(LEFT));
+		cube.get("RIGHT").setValues(state.getFace(RIGHT));
+		cube.get("UP").setValues(state.getFace(UP));
+		cube.get("DOWN").setValues(state.getFace(DOWN));
+	}
+
+	/**
+	 * Gets the move list from the cube. If {@link #solveCube()} was previously
+	 * called then this will be the list of moves in the solution.
+	 * @return the cube's move list
+	 */
+	public ArrayList<RubikMove> getMoveList() {
+		return moveList;
 	}
 
 	private void createCube() {
@@ -42,7 +84,7 @@ public class RubikCube {
 		}
 	}
 	
-	CubeState getCubeState() {
+	public CubeState getCubeState() {
 		return new CubeState(getFaces(cube.get("FRONT")));
 	}
 	
@@ -130,7 +172,8 @@ public class RubikCube {
 				((move == null) ? null : move.getMoveRepInt()) };
 		return ret;
 	}
-*/
+	*/
+
 	/*public void writeCubeDebug(android.content.Context context) {
 		try {
 			// open myfilename.txt for writing
@@ -1268,10 +1311,16 @@ public class RubikCube {
 		return isSolved();
 	}
 	
-	/*private boolean executeMoves(ArrayList<RubikMove> moves) {
+	/**
+	 * Executes a series of moves and returns true if the cube finishes in a solved state.
+	 * @param moves to execute
+	 * @return true if the cube is solved after executing the moves
+	 */
+	public boolean executeMoves(ArrayList<RubikMove> moves) {
 		RubikFace[] faces = getFaces(cube.get("FRONT"));
 		RubikFace face = null;
-		cubeListDebug = new ArrayList<int[][]>();
+		//cubeListDebug = new ArrayList<int[][]>();
+		startRecord();
 		for (RubikMove move : moves) {
 			if (move.getMove() == 'M' || move.getMove() == 'E' || move.getMove() == 'S') {
 				if (move.getClockwise()) {
@@ -1280,7 +1329,7 @@ public class RubikCube {
 					} else if (move.getMove() == 'E') {
 						face = faces[DOWN];
 					} else {
-						face = faces[BACK];
+						face = faces[FRONT];
 					}
 				} else {
 					if (move.getMove() == 'M') {
@@ -1288,7 +1337,7 @@ public class RubikCube {
 					} else if (move.getMove() == 'E') {
 						face = faces[UP];
 					} else {
-						face = faces[FRONT];
+						face = faces[BACK];
 					}
 				}
 				turnMiddle(face);
@@ -1316,11 +1365,11 @@ public class RubikCube {
 				}
 				turn(face, move.getClockwise());
 			}
-			cubeListDebug.add(getCubeDebug(null, move));
+			//cubeListDebug.add(getCubeDebug(null, move));
 		}
+		endRecord();
 		return isSolved();
-		
-	}*/
+	}
 	
 	/*private static String get5(int i, ArrayList<RubikMove> moves) {
 		String ret ="";
@@ -1516,6 +1565,13 @@ public class RubikCube {
 			}
 			state = data;
 			toString();
+		}
+		
+		byte[] getFace(int face) {
+			if (face < FRONT || face > DOWN) {
+				throw new IllegalArgumentException(String.format("Illegal face index %d", face));
+			}
+			return Arrays.copyOfRange(state, face * 9, (face + 1) * 9);
 		}
 		
 		public int[] nativeStringState()
