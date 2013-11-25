@@ -1,5 +1,6 @@
 package com.droidtools.rubiksolver;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -8,10 +9,10 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 public class HColor implements Comparable<HColor>, Parcelable {
-	private static final double PI = 3.14159;
+	public static final double PI = 3.14159;
 	
 	// These are accessible for performance.
-	// Hue (Normalized to 0 to 2PI)
+	// Hue (Normalized to 0 to 1), To get an angle multiple by 2*PI
 	public double h = 0;
 	// Saturation (Normalized to 0 to 1)
 	public double s = 0;
@@ -70,29 +71,6 @@ public class HColor implements Comparable<HColor>, Parcelable {
 		this.v = v;
 		this.s = s;
 	}
-	
-	
-
-	/*
-	public double getH() {
-		return h;
-	}
-
-	public double getL() {
-		return l;
-	}
-
-	public int getR() {
-		return r;
-	}
-
-	public int getG() {
-		return g;
-	}
-
-	public int getB() {
-		return b;
-	}*/
 
 	public int getColor() {
 		return 0xFF << 24 | r << 16 | g << 8 | b;
@@ -140,7 +118,7 @@ public class HColor implements Comparable<HColor>, Parcelable {
 			ret[0] = 4.0 + (r - g) / (maxcol - mincol);
 		}
 
-		ret[0] = (ret[0] / 6) * 2 * PI;
+		ret[0] = (ret[0] / 6);
 
 		return ret;
 	}
@@ -158,7 +136,7 @@ public class HColor implements Comparable<HColor>, Parcelable {
 	public double distanceHSV(HColor other) {
 		double sp1 = this.v * this.s;
 		double sp2 = other.v * other.s;
-		double cosTheta = Math.cos(other.h - this.h);
+		double cosTheta = Math.cos((other.h - this.h) * 2 * PI);
 		double hSquared = sp1 * sp1 + sp2 * sp2 - 2 * sp1 * sp2 * cosTheta;
 		double dv = this.v - other.v;
 		return Math.sqrt(dv * dv + hSquared);
@@ -202,6 +180,94 @@ public class HColor implements Comparable<HColor>, Parcelable {
 		this.h = res[0];
 		this.v = res[1];
 		this.s = res[2];
+	}
+	
+	/**
+	 * Returns and average color of the list of colors. This is an RGB cartesian space average.
+	 * @param L list of colors to average
+	 * @return the average color
+	 */
+	public static HColor rgbAverage(List<HColor> L) {
+		int r,g,b;
+		r=g=b=0;
+		for (HColor color : L) {
+			r += color.r;
+			g += color.g;
+			b += color.b;
+		}
+		int sz = L.size();
+		if (sz == 0) return new HColor(0,0,0);
+		return new HColor(r/sz, g/sz, b/sz);
+	}
+	
+	/**
+	 * Calculates the dominant color in the list by binning the colors then taking the average color
+	 * of the dominant color bin.
+	 * @param L list of colors to find the dominant average
+	 * @return the dominant average color
+	 */
+	public static HColor hsvDominantAverage(List<HColor> L) {
+		final int NUM_H_BINS = 100;
+		final int NUM_S_BINS = 10;
+		final int NUM_V_BINS = 10;
+		
+		int[][][] colorCount = new int[NUM_H_BINS][NUM_S_BINS][NUM_V_BINS];
+		
+		int hIndex, sIndex, vIndex;
+		int hMaxIndex, sMaxIndex, vMaxIndex;
+		hMaxIndex = sMaxIndex = vMaxIndex = -1;
+		int maxColorCount = 0;
+		for (HColor color : L) {
+			hIndex = (int) (color.h * NUM_H_BINS);
+			sIndex = (int) (color.s * NUM_S_BINS);
+			vIndex = (int) (color.v * NUM_V_BINS);
+			
+			// To catch the 1.0 case.
+			if(hIndex == NUM_H_BINS) {
+				hIndex--;
+			}
+			if(sIndex == NUM_S_BINS) {
+				sIndex--;
+			}
+			if(vIndex == NUM_V_BINS) {
+				vIndex--;
+			}
+			
+			colorCount[hIndex][sIndex][vIndex]++;
+			if (colorCount[hIndex][sIndex][vIndex] > maxColorCount) {
+				maxColorCount = colorCount[hIndex][sIndex][vIndex];
+				hMaxIndex = hIndex;
+				sMaxIndex = sIndex;
+				vMaxIndex = vIndex;
+			}
+		}
+		
+		// Now calculate the average of the dominant bin
+		// TODO: dedupe this code.
+		List<HColor> dominantColors = new ArrayList<HColor>(maxColorCount);
+		for (HColor color : L) {
+			hIndex = (int) (color.h * NUM_H_BINS);
+			sIndex = (int) (color.s * NUM_S_BINS);
+			vIndex = (int) (color.v * NUM_V_BINS);
+			
+			// To catch the 1.0 case.
+			if(hIndex == NUM_H_BINS) {
+				hIndex--;
+			}
+			if(sIndex == NUM_S_BINS) {
+				sIndex--;
+			}
+			if(vIndex == NUM_V_BINS) {
+				vIndex--;
+			}
+			
+			colorCount[hIndex][sIndex][vIndex]++;
+			if (hIndex == hMaxIndex && sIndex == sMaxIndex && vIndex == vMaxIndex) {
+				dominantColors.add(color);
+			}
+		}
+		
+		return rgbAverage(dominantColors);
 	}
 	
 	@Override

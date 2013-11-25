@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -18,9 +17,9 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
-import android.graphics.Bitmap.Config;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -201,24 +200,6 @@ public class ColorDecoder implements Parcelable {
 //		return out;
 //	}
 	
-    /**
-	 * Returns and average color of the list of colors. This is an RGB cartesian space average.
-	 * @param L list of colors to average
-	 * @return the avereage color
-	 */
-	public static HColor avg(List<HColor> L) {
-		int r,g,b;
-		r=g=b=0;
-		for (HColor color : L) {
-			r += color.r;
-			g += color.g;
-			b += color.b;
-		}
-		int sz = L.size();
-		if (sz == 0) return new HColor(0,0,0);
-		return new HColor(r/sz, g/sz, b/sz);
-	}
-
 	public HColor getColor(byte key) {
 		Parcelable[] color = ids.get(key);
 		if (color != null) {
@@ -308,7 +289,6 @@ public class ColorDecoder implements Parcelable {
 		}
 	}
 	
-	
 	private void deleteImages() 
 	{
 		for (Map.Entry<Byte, Parcelable[]> entry : ids.entrySet()) {
@@ -376,8 +356,6 @@ public class ColorDecoder implements Parcelable {
 		ArrayList<HColor> cubeVals = new ArrayList<HColor>();
 		HColor c;
 		int x0,y0,x1,y1,xc,yc; // l,h;
-		int sampleLow, sampleHigh;
-		HColor sampleColor;
 		int width = im.getWidth();
 		int height = im.getHeight();
 		int[] pixels = new int[width * height];
@@ -446,31 +424,33 @@ public class ColorDecoder implements Parcelable {
 					subCubes.add(c);
 				}
 			}
-
+						
 			//Collections.sort(subCubes);
 			//l = (int) (subCubes.size() * .35);
 			//h = (int) (subCubes.size() * .65);
 	        //c = avg(subCubes.subList(l, h));
 	        
+//			int sampleLow, sampleHigh;
+//			HColor sampleColor;
 			//for (int samp = 0; samp < 10; samp++) {
-				Collections.shuffle(subCubes);
-				final int sampleSize = (int) (subCubes.size() * 0.1);
-				List<HColor> sampleList = subCubes.subList(0, sampleSize);
-				Collections.sort(sampleList, HColor.Comparators.LUMINANCE);
-				sampleLow = (int) (sampleList.size() * .35);
-				sampleHigh = (int) (sampleList.size() * .65);
-				sampleColor = avg(sampleList.subList(sampleLow, sampleHigh));
+//				Collections.shuffle(subCubes);
+//				final int sampleSize = (int) (subCubes.size() * 0.1);
+//				List<HColor> sampleList = subCubes.subList(0, sampleSize);
+//				Collections.sort(sampleList, HColor.Comparators.LUMINANCE);
+//				sampleLow = (int) (sampleList.size() * .35);
+//				sampleHigh = (int) (sampleList.size() * .65);
+//				sampleColor = avg(sampleList.subList(sampleLow, sampleHigh));
 			
 //		        Log.d("DECODER", String.format("Original Size %d, Sample Percent %f, Distance = %f",
 //		        		subCubes.size(), samplePercent, sampleColor.distance(sampleColor)));
 			//}
 	        
-	        cubeVals.add(sampleColor);
+	        //cubeVals.add(sampleColor);
 	        
 			// Instead of thresholding the colors and using that, just use them all.
 			// In the past these were sorted by Hue anyway which makes no sense. Possibly luminance.
-		    // c = avg(subCubes);
-	        // cubeVals.add(c);
+		    c = HColor.hsvDominantAverage(subCubes);
+	        cubeVals.add(c);
 		}
 		
 		// DEBUG: Write out the sobel data (only includes the pixels that were transformed)
@@ -518,13 +498,15 @@ public class ColorDecoder implements Parcelable {
 				int[] colors = new int[100*100];
 				java.util.Arrays.fill(colors, 0, 100*100, cubeVals.get(i).getColor());
 				//ids.put(nextId, new Parcelable[]{cubeVals.get(i), Bitmap.createBitmap(colors, 100, 100, Bitmap.Config.ARGB_8888)});
-				Bitmap imref = Bitmap.createBitmap(im, x1, y1, sideLength / 3, sideLength / 3);
+				Matrix matrix = new Matrix();
+				matrix.postRotate(90);
+				Bitmap imref = Bitmap.createBitmap(im, x1, y1, sideLength / 3, sideLength / 3, matrix, true);
 				if (imref.getWidth() > 100) {
 					int newWidth = 100;
 					int newHeight = 100;
 					float scaleWidth = ((float) newWidth) / imref.getWidth();
 					float scaleHeight = ((float) newHeight) / imref.getHeight();
-				    Matrix matrix = new Matrix();
+				    matrix = new Matrix();
 			        matrix.postScale(scaleWidth, scaleHeight);
 			        imref = Bitmap.createBitmap(imref, 0, 0,
 			        		imref.getWidth(), imref.getHeight(), matrix, true);

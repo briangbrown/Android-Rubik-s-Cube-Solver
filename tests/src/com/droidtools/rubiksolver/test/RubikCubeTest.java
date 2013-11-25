@@ -10,7 +10,7 @@ import junit.framework.TestCase;
 
 public class RubikCubeTest extends TestCase{
 	
-	private final String TAG = RubikCubeTest.class.getName();
+	// private final String TAG = RubikCubeTest.class.getName();
 	
 	public RubikCubeTest() {
 		super();

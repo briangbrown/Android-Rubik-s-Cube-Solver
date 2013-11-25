@@ -5,8 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -37,22 +35,6 @@ public class ColorDecoderTest extends InstrumentationTestCase {
 		super.setUp();
 		this.testContext = getInstrumentation().getContext();
 		this.targetContext = getInstrumentation().getTargetContext();
-	}
-
-	/**
-	 * Tests that the HColor Average method works correctly.
-	 * TODO: move this into HColor.
-	 */
-	public void testAvg() {
-		List<HColor> colors = new ArrayList<HColor>();
-		colors.add(new HColor(255, 0, 0));
-		colors.add(new HColor(0, 255, 0));
-		colors.add(new HColor(0, 0, 255));
-		
-		HColor avgColor = ColorDecoder.avg(colors);
-		assertEquals(85, avgColor.r);
-		assertEquals(85, avgColor.g);
-		assertEquals(85, avgColor.b);
 	}
 	
 	public void testSyntheticRowThreeColorDecode() {
