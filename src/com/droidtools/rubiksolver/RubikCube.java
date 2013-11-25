@@ -23,7 +23,7 @@ public class RubikCube {
 	private static final int DOWN = 5;
 	ArrayList<CubeState> cubeList;
 	//ArrayList<int[][]> cubeListDebug;
-	
+
 	static {
 		System.loadLibrary("colordecoder");
     }
@@ -76,6 +76,15 @@ public class RubikCube {
 	public ArrayList<RubikMove> getMoveList() {
 		return moveList;
 	}
+	
+	/**
+	 * Gets the cube list from the cube. If {@link #solveCube()} was previously
+	 * called then this will be the list of cube states while executing the solution moves.
+	 * @return the cube's cube list
+	 */
+	public ArrayList<CubeState> getCubeList() {
+		return cubeList;
+	}
 
 	private void createCube() {
 		String[] faces = { "UP", "FRONT", "LEFT", "BACK", "RIGHT", "DOWN" };
@@ -107,8 +116,6 @@ public class RubikCube {
 
 	public String nativeSolve() {
 		return nativeSolve(getCubeState().nativeStringState());
-		
-		
 	}
 	
 	/*private int[][] getCubeDebug(RubikFace unUsed, RubikMove move) {
@@ -1379,71 +1386,68 @@ public class RubikCube {
 		return ret;
 	}*/
 	
-	public static ArrayList<RubikMove> cubeStateOptimization(ArrayList<CubeState> cubeList, ArrayList<RubikMove> moves) {
+	/**
+	 * Optimizes a move list by looking for duplicate cube states then removing all the moves
+	 * between the duplicate states. This algorithm does not modify the incoming cube list or move
+	 * list.
+	 * @param cubeList list of cube states
+	 * @param moves list of moves
+	 * @return the optimized move list
+	 */
+	public static ArrayList<RubikMove> cubeStateOptimization(
+			ArrayList<CubeState> cubeList, ArrayList<RubikMove> moves) {
 		int cubeListSz = cubeList.size();
-		ArrayList<CubeState> cubeListCopy = new ArrayList<CubeState>(cubeList);
 		ArrayList<RubikMove> sol = new ArrayList<RubikMove>(moves);
-		Collections.sort(cubeListCopy);
-		Map<String, Integer> dupes = new HashMap<String, Integer>();
-		/*for (int i=0; i<cubeListSz-1; i++) {
-			android.util.Log.d("OPTIM", cubeListCopy.get(i).toString());
-		}*/
-		//android.util.Log.d("OPTIM", String.format("cubeList - %d | movesList = %d", cubeList.size(), sol.size()));
-		for (int i=0; i<cubeListSz-1; i++) {
-			if (cubeListCopy.get(i).equals(cubeListCopy.get(i+1))) {
-				String key = cubeListCopy.get(i).toString();
-				int newValue = (dupes.containsKey(key)) ? dupes.get(key)+1 : 1;
-				dupes.put(key, newValue);
-			}
-		}
-		//File dump = new File(android.os.Environment.getExternalStorageDirectory(), "rubik_dump.txt");
-        //FileWriter dumpWriter = new FileWriter(dump);
-        //BufferedWriter out = new BufferedWriter(dumpWriter);
-		//ArrayList<int[]> remove = new ArrayList<int[]>();
-		for (int i=cubeListSz-1; i>=1; i--) {
+		Map<String, Integer> firstStateIndex = new HashMap<String, Integer>();
+
+		// Store the first index of a state.
+		for (int i = 0; i < cubeListSz; i++) {
 			String key = cubeList.get(i).toString();
-			//out.write(String.format("%s -> %s\r\n", cubeList.get(i).toString(), sol.get(i).toString()));
-			if (dupes.containsKey(key)) {
-				for (int j=0; j<i; j++) {
-					//int z = j/(j-i);
-					String key2 = cubeList.get(j).toString();
-					if (key.equals(key2)) {
-						//ArrayList<CubeState> x = new ArrayList<CubeState>();
-						//ArrayList<RubikMove> y = new ArrayList<RubikMove>();
-						for (int s=i; s>j; s--) {
-							cubeList.remove(s);
-							//x.add(cubeList.get(s));
-						}
-						for (int s=i-1; s>=j; s--) {
-							sol.remove(s);
-							//y.add(sol.get(s));
-						}
-						//for (int k=0; k<x.size(); k++) 
-						//	out.write(String.format("// %s -> %s\r\n", x.get(k).toString(), y.get(k).toString()));
-						i = j;
-						dupes.remove(key);
-						break;
-					}
-				}
-				
+			if (!firstStateIndex.containsKey(key)) {
+				firstStateIndex.put(key, i);
 			}
 		}
-		//out.close();
-		//android.util.Log.d("OPTIM", String.format("cubeList - %d | movesList = %d", cubeList.size(), sol.size()));
-		return sol;
-		/*for (int i=cubeListSz-1; i>=1; i--) {
-			
-			
-		}*/
 		
-		//return numDupes;
+		// Scan from the end of the cube state list.
+		for (int i = cubeListSz - 1; i >= 1; i--) {
+			String key = cubeList.get(i).toString();
+			// If the first occurrence of this state is not the current one then it is a duplicate.
+			int first = firstStateIndex.get(key);
+			if (first != i) {
+				for (int s = i; s > first; s--) {
+					cubeList.remove(s);
+				}
+				for (int s = i - 1; s >= first; s--) {
+					sol.remove(s);
+				}
+				i = first;
+				break;
+			}
+		}
+		return sol;
 	}
 	
-	public static ArrayList<RubikMove> optomizeSolution(ArrayList<RubikMove> moves) {
-		return optomizeSolution(moves, 10, 0);
+	/**
+	 * Attempts to remove simple duplicate moves including 4 moves in a row, 3 moves in a row
+	 * (replace with inverse move) and pairs of forward and inverse moves. The original move list
+	 * is not modified by this algorithm.
+	 * @param moves to optimize
+	 * @return the optimized move list
+	 */
+	public static ArrayList<RubikMove> optimizeSolution(ArrayList<RubikMove> moves) {
+		return optimizeSolution(moves, 10, 0);
 	}
 	
-	private static ArrayList<RubikMove> optomizeSolution(ArrayList<RubikMove> moves, int depth, int dupes) {
+	/**
+	 * Attempts to remove simple duplicate moves including 4 moves in a row, 3 moves in a row
+	 * (replace with inverse move) and pairs of forward and inverse moves. The original move list
+	 * is not modified by this algorithm.
+	 * @param moves to optimize
+	 * @param depth number of passes over the moves
+	 * @param dupes number of duplicates found
+	 * @return the optimized move list
+	 */
+	private static ArrayList<RubikMove> optimizeSolution(ArrayList<RubikMove> moves, int depth, int dupes) {
 		ArrayList<RubikMove> sol = new ArrayList<RubikMove>(moves);
 		ArrayList<Integer> remove = new ArrayList<Integer>();
 		boolean found = true;
@@ -1452,6 +1456,7 @@ public class RubikCube {
 			found = false;
 			int mvSz = sol.size();
 			remove.clear();
+			// Search for 4 of the same move in a row, searching from the end.
 			for (int i=mvSz-1; i>=3; i--) {
 				RubikMove move = sol.get(i);
 				if (move.equals(sol.get(i-1)) &&
@@ -1463,6 +1468,8 @@ public class RubikCube {
 					dupes++;
 				}
 			}
+			// Remove the 4 duplicate moves from the solution from the back to the front
+			// so that the indices are still valid during removal.
 			for (Integer i : remove) {
 				changesMade = true;
 				sol.remove((int)i);
@@ -1473,24 +1480,20 @@ public class RubikCube {
 		}
 		found = true;
 		while (found) {
-			
 			found = false;
 			remove.clear();
 			int mvSz = sol.size();
-			//android.util.Log.d("HELLO", "solSize = "+mvSz);
+			// Search for 3 of the same move in a row, searching from the end.
 			for (int i=mvSz-1; i>=2; i--) {
 				RubikMove move = sol.get(i);
 				if (move.equals(sol.get(i-1)) &&
 						move.equals(sol.get(i-2))) {
-					//android.util.Log.d("HELLO", "Possible optomizaion");
 					remove.add(i);
 					i -= 3;
 					found = true;
 				}
 			}
-			//if ( (new RubikMove('F', false) ).equals(new RubikMove('F', false) ) ) {
-			//android.util.Log.d("HELLO", "removes = "+remove.size());
-			//}
+			// Remove the 3 duplicate moves from the solution and replace with the inverse move.
 			for (Integer i : remove) {
 				changesMade = true;
 				RubikMove inv = sol.get((int)i).getInverse();
@@ -1505,6 +1508,7 @@ public class RubikCube {
 			found = false;
 			remove.clear();
 			int mvSz = sol.size();
+			// Search for pairs of moves that are the inverse of each other, searching from the end.
 			for (int i=mvSz-1; i>=1; i--) {
 				RubikMove move = sol.get(i);
 				if (move.getInverse().equals(sol.get(i-1))) {
@@ -1514,27 +1518,21 @@ public class RubikCube {
 					dupes++;
 				}
 			}
+			// Remove the pairs of inverse moves.
 			for (Integer i : remove) {
 				changesMade = true;
-				//android.util.Log.d("OPTIM", String.format("%d Removing %s and %s", sol.size(), sol.get(i), sol.get(i-1)));
-				//android.util.Log.d("OPTIM", get5(i, sol));
 				sol.remove((int)i);
-				//android.util.Log.d("OPTIM", String.format("Removing %s and %s", sol.get(i), sol.get(i-1)));
 				sol.remove(i-1);
-				//sol.
-				//android.util.Log.d("OPTIM",  sol.size()+" removed");
-				//android.util.Log.d("OPTIM", get5(i, sol));
 			}
 		}
 		if (changesMade && depth > 0)
-			return optomizeSolution(sol, depth-1, dupes);
+			return optimizeSolution(sol, depth-1, dupes);
 		else {
-			//android.util.Log.d("OPTIM", "Simple Dupes - "+dupes);
 			return sol;
 		}
 	}
 	
-	protected static class CubeState implements Comparable<CubeState> {
+	public static class CubeState implements Comparable<CubeState> {
 		private byte[] state;
 		private String stringState;
 
