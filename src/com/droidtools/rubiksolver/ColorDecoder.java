@@ -561,7 +561,7 @@ public class ColorDecoder implements Parcelable {
 			boolean foundCol = false;
 			//for (int j=0; j < cz; j++) {
 		
-			Byte key = cubeVals.get(i).mostSimilar(new ArrayList<Byte>(ids.keySet()), this, 0.3);
+			Byte key = cubeVals.get(i).mostSimilar(new ArrayList<Byte>(ids.keySet()), this, 0.2);
 			if (key != null)
 			{
 				foundCol = true;
