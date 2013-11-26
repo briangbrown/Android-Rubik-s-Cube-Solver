@@ -29,6 +29,9 @@ import android.util.Log;
  * ColorDecoder is NOT thread safe. Working on it.
  */
 public class ColorDecoder implements Parcelable {
+	
+	private final String TAG = ColorDecoder.class.getName();
+	
 	//private List<HColor> colors;
 	//private List<Bitmap> images;
 	private ConcurrentNavigableMap<Byte, Parcelable[]> ids;
@@ -112,7 +115,7 @@ public class ColorDecoder implements Parcelable {
 	 * @return
 	 */
 	private int sobelLuminance(int[] luminance, int x, int y, int width, int[] cache, int[][] sob) {
-		long startTime = System.currentTimeMillis();
+		//long startTime = System.currentTimeMillis();
 		int position = x + y * width;
 		if (cache[position] != -1) {
 			return cache[position];
@@ -139,7 +142,7 @@ public class ColorDecoder implements Parcelable {
 		// This is a modification to classic sobel that highly favors vertical and horizontal edges.
 		int min = Math.min(255, Math.max(0, Math.abs(horizSobel + vertSobel) / 4));
 		cache[position] = min;
-		sobelTime += System.currentTimeMillis() - startTime;
+		//sobelTime += System.currentTimeMillis() - startTime;
 		return min;
 	}
 	
@@ -150,15 +153,19 @@ public class ColorDecoder implements Parcelable {
 			r = (color >> 16) & 0xFF;
 			g = (color >> 8) & 0xFF;
 			b = color & 0xFF;
-			if (r == g && g == b) {
-				luminance[i] = r;
-			} else {
+			// NOTE: faster to not compare because it is a rare case for most images.
+//			if (r == g && g == b) {
+//				luminance[i] = r;
+//			} else {
 				// Cheap approximate luminance
-				// luminance[i] = (byte) ((r + g + g + b) >> 2);
+				luminance[i] = (r + g + g + b) >> 2;
 				
 				// Full luminance calc
-				luminance[i] = (int) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
-			}
+				// luminance[i] = (int) (r * 299.0 / 1000 + g * 587.0 / 1000 + b * 114.0 / 1000);
+				
+				// Pseudo luminance where anything not black if amped up.
+				// luminance[i] = Math.max(r, Math.max(g, b));
+//			}
 		}
 	}
 	
@@ -355,7 +362,7 @@ public class ColorDecoder implements Parcelable {
 		//ArrayList<HColor> hues = new ArrayList<HColor>();
 		ArrayList<HColor> cubeVals = new ArrayList<HColor>();
 		HColor c;
-		int x0,y0,x1,y1,xc,yc; // l,h;
+		int xLow,yHigh,xHigh,yLow,xCenter,yCenter; // l,h;
 		int width = im.getWidth();
 		int height = im.getHeight();
 		int[] pixels = new int[width * height];
@@ -369,61 +376,143 @@ public class ColorDecoder implements Parcelable {
 		if (AppConfig.DEBUG) {
 			debugSaveGreyBitmap(luminance, "luminance.png", width, height);
 		}
+		// This is the margin between the edge of the cube face and the image edge.
 		int margin = (int) (Math.min(width, height) * .1);
+		// This is the cube face side length.
 		int sideLength = Math.min(width, height) - margin;
+		// This is how much past a facelet edge we can search without going of the image.
+		int edgeBuffer = (margin / 2) - 2;
+		// We will not search from the center of the facelet, but this amount out from the center.
+		int centerBuffer = sideLength / 18;
 		
-		final int sobelThreshold = 40;
+		// This is the threshold where we think we have hit an edge.
+		final int minSobelThreshold = 40;
+		
+		// Store the min/max x and y for each cubelet.
+		int[] minX = new int[9];
+		int[] minY = new int[9];
+		int[] maxX = new int[9];
+		int[] maxY = new int[9];
 		
 		for (int i=0; i<9; i++) {
 			subCubes.clear();
 			sampleSubCubes.clear();
-			x0 = (width - sideLength) / 2 + (sideLength / 3) * ((i/3) % 3);
-			y0 = height - margin/2 - (sideLength / 3) * (i % 3);//margin/2 + sideLength * (3 - (i % 3))/3;
-			xc = x0 + (sideLength / 6);
-			yc = y0 - (sideLength / 6);
-			x1 = x0 + (sideLength / 3);
-			y1 = y0 - (sideLength / 3);
+			xLow = (width - sideLength) / 2 + (sideLength / 3) * ((i/3) % 3);
+			xHigh = xLow + (sideLength / 3);
 			
-			// Q1
-			for (int x=xc; x > x0; x--) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
-				for (int y=yc; y < y0; y++) {
-					//Log.d("DSSD", String.format("%d %d %d %d", x,y,y0,width));
-					if (sobelLuminance(luminance, x, y ,width, sobelData, sobelTemp) > sobelThreshold) break;
+			yHigh = height - margin/2 - (sideLength / 3) * (i % 3);
+			yLow = yHigh - (sideLength / 3);
+			
+			xCenter = xLow + (sideLength / 6);
+			yCenter = yHigh - (sideLength / 6);
+			
+			minX[i] = 0;
+			maxX[i] = 0;
+			minY[i] = 0;
+			maxY[i] = 0;
+			
+			int x = xCenter - centerBuffer;
+			int y = yCenter + centerBuffer;
+			int numMaxY = 0;
+			int numMinY = 0;
+			int numMaxX = 0;
+			int numMinX = 0;
+			int searchIndex = 0;
+			for (x = xCenter - centerBuffer; x > xLow; x--) {
+				for (y = yCenter - centerBuffer - searchIndex; y > yLow - edgeBuffer; y--) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						minY[i] += y + 1;
+						numMinY++;
+						break;
+					}
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-			}
-			
-			// Q2
-			for (int x=xc; x > x0; x--) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
-				for (int y=yc; y > y1; y--) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
+				for (y = yCenter + centerBuffer + searchIndex; y < yHigh + edgeBuffer; y++) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						maxY[i] += y - 1;
+						numMaxY++;
+						break;
+					}
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
+				searchIndex++;
 			}
 			
-			// Q3
-			for (int x=xc; x < x1; x++) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
-				for (int y=yc; y < y0; y++) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
+			searchIndex = 0;
+			for (x = xCenter + centerBuffer; x < xHigh; x++) {
+				for (y = yCenter - centerBuffer - searchIndex; y > yLow - edgeBuffer; y--) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						minY[i] += y + 1;
+						numMinY++;
+						break;
+					}
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
-			}
-			
-			// Q4
-			for (int x=xc; x < x1; x++) {
-				if (sobelLuminance(luminance, x, yc, width, sobelData, sobelTemp) > sobelThreshold) break;
-				for (int y=yc; y > y1; y--) {
-					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > sobelThreshold) break;
+				for (y = yCenter + centerBuffer + searchIndex; y < yHigh + edgeBuffer; y++) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						maxY[i] += y - 1;
+						numMaxY++;
+						break;
+					}
 					c = new HColor(pixels[x + y * width]);
 					subCubes.add(c);
 				}
+				searchIndex++;
 			}
+			
+			searchIndex = 0;
+			for (y = yCenter + centerBuffer; y < yHigh; y++) {
+				for (x = xCenter - centerBuffer - 1 - searchIndex; x > xLow - edgeBuffer; x--) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						minX[i] += x + 1;
+						numMinX++;
+						break;
+					}
+					c = new HColor(pixels[x + y * width]);
+					subCubes.add(c);
+				}
+				for (x = xCenter + centerBuffer + 1 + searchIndex; x < xHigh + edgeBuffer; x++) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						maxX[i] += x - 1;
+						numMaxX++;
+						break;
+					}
+					c = new HColor(pixels[x + y * width]);
+					subCubes.add(c);
+				}
+				searchIndex++;
+			}
+			
+			searchIndex = 0;
+			for (y = yCenter - centerBuffer; y > yLow; y--) {
+				for (x = xCenter - centerBuffer - 1 - searchIndex; x > xLow - edgeBuffer; x--) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						minX[i] += x + 1;
+						numMinX++;
+						break;
+					}
+					c = new HColor(pixels[x + y * width]);
+					subCubes.add(c);
+				}
+				for (x = xCenter + centerBuffer + 1 + searchIndex; x < xHigh + edgeBuffer; x++) {
+					if (sobelLuminance(luminance, x, y, width, sobelData, sobelTemp) > minSobelThreshold) {
+						maxX[i] += x - 1;
+						numMaxX++;
+						break;
+					}
+					c = new HColor(pixels[x + y * width]);
+					subCubes.add(c);
+				}
+				searchIndex++;
+			}
+			
+			minX[i] = numMinX == 0 ? xLow : minX[i] / numMinX;
+			minY[i] = numMinY == 0 ? yLow : minY[i] / numMinY;
+			maxX[i] = numMaxX == 0 ? xHigh : maxX[i] / numMaxX;
+			maxY[i] = numMaxY == 0 ? yHigh : maxY[i] / numMaxY;
 						
 			//Collections.sort(subCubes);
 			//l = (int) (subCubes.size() * .35);
@@ -492,15 +581,17 @@ public class ColorDecoder implements Parcelable {
 				}
 			}*/
 			if (!foundCol) {
-				x1 = (width - sideLength) / 2 + (sideLength / 3) * ((i/3) % 3);
-				y1 = height - margin/2 - (sideLength / 3) * (i % 3) - (sideLength / 3);
+                // TODO: Add some min/max checking for squareness and similarity with outhe cubelets.
+				//xHigh = (width - sideLength) / 2 + (sideLength / 3) * ((i/3) % 3);
+				//yLow = height - margin/2 - (sideLength / 3) * (i % 3) - (sideLength / 3);
 				nextId++;
 				int[] colors = new int[100*100];
 				java.util.Arrays.fill(colors, 0, 100*100, cubeVals.get(i).getColor());
 				//ids.put(nextId, new Parcelable[]{cubeVals.get(i), Bitmap.createBitmap(colors, 100, 100, Bitmap.Config.ARGB_8888)});
 				Matrix matrix = new Matrix();
 				matrix.postRotate(90);
-				Bitmap imref = Bitmap.createBitmap(im, x1, y1, sideLength / 3, sideLength / 3, matrix, true);
+				Bitmap imref = Bitmap.createBitmap(
+                        im, minX[i], minY[i], maxX[i] - minX[i], maxY[i] - minY[i], matrix, true);
 				if (imref.getWidth() > 100) {
 					int newWidth = 100;
 					int newHeight = 100;
@@ -680,6 +771,7 @@ public class ColorDecoder implements Parcelable {
 	        FileOutputStream fos = new FileOutputStream(file);
 	        image.compress(Bitmap.CompressFormat.PNG, 90, fos);
 	        fos.close();
+	        Log.d(TAG, String.format("Debug file saved to %s", file.getAbsolutePath()));
 	    } catch (FileNotFoundException e) {
 	        e.printStackTrace();
 	    } catch (IOException e) {
